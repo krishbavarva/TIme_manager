@@ -1,0 +1,30 @@
+version: "3.9"
+
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: gotham_db
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: gotham_db
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+
+  app:
+    build: .
+    container_name: gotham_app
+    environment:
+      DATABASE_URL: ecto://postgres:postgres@db:5432/gotham_db
+      SECRET_KEY_BASE: supersecretkeysupersecretkeysupersecretkey
+      PHX_HOST: localhost
+      PORT: 4000
+    depends_on:
+      - db
+    ports:
+      - "4000:4000"
+
+volumes:
+  postgres_data:
