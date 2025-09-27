@@ -2,29 +2,48 @@ version: "3.9"
 
 services:
   db:
-    image: postgres:15-alpine
+    image: postgres:15
     container_name: gotham_db
+    restart: always
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: gotham_db
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
     ports:
       - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
 
   app:
     build: .
     container_name: gotham_app
+    env_file: 
+      - .env
     environment:
-      DATABASE_URL: ecto://postgres:postgres@db:5432/gotham_db
-      SECRET_KEY_BASE: supersecretkeysupersecretkeysupersecretkey
-      PHX_HOST: localhost
-      PORT: 4000
+      # Phoenix / Ecto runtime expects DATABASE_URL
+      DATABASE_URL: "ecto://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${DB_HOST}/${POSTGRES_DB}"
+      SECRET_KEY_BASE: ${SECRET_KEY_BASE}
+      PHX_HOST: ${PHX_HOST}
+      PORT: ${PORT}
     depends_on:
       - db
     ports:
-      - "4000:4000"
+      - "${PORT}:${PORT}"
+    command: >
+      sh -c "
+        echo 'Waiting for Postgres to be ready...';
+        until pg_isready -h ${DB_HOST} -p 5432 -U ${POSTGRES_USER}; do
+          sleep 2
+        done;
+        echo 'Postgres is ready! Running migrations...';
+        bin/gotham_scheduler eval '
+          Application.ensure_all_started(:gotham_scheduler);
+          GothamScheduler.Repo.start_link();
+          Ecto.Migrator.run(GothamScheduler.Repo, :up, all: true);
+        ';
+        echo 'Starting app...';
+        bin/gotham_scheduler start
+      "
 
 volumes:
   postgres_data:
